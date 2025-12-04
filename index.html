@@ -277,23 +277,21 @@ function shuffleOnce(){
   });
 }
 
-// АУДИО: ШАГИ З ЗАТРИМКОЮ 3 СЕКУНДИ
+// АУДИО: ШАГИ З ЗАТРИМКОЮ 3 СЕКУНДИ - ЧАСТОТА ПІДВИЩЕНА НА 40%
 let audioCtx = null;
 let masterGain = null;
-let kickDrum = { running: false, mute: false, initialized: false };
+let kickDrum = { running: false, mute: false };
 
 function initAudio() {
-  if (kickDrum.initialized) return;
+  if (audioCtx) return;
   
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = 1.0;
+    masterGain.gain.value = kickDrum.mute ? 0 : 1.0;
     masterGain.connect(audioCtx.destination);
 
-    kickDrum.initialized = true;
     kickDrum.running = true;
-    kickDrum.mute = false;
     
     if (audioCtx.state === 'suspended') {
       audioCtx.resume().then(() => {
@@ -309,7 +307,7 @@ function initAudio() {
   }
 }
 
-// Створення одного ГУЧНОГО удару - БЕЗ СКРИПІВ
+// Створення одного ГУЧНОГО удару - ЧАСТОТА ПІДВИЩЕНА НА 40%
 function makeSingleKick(startTime, gainMultiplier = 1.0) {
   if (!audioCtx || !kickDrum.running) return;
   
@@ -317,11 +315,11 @@ function makeSingleKick(startTime, gainMultiplier = 1.0) {
   osc.type = 'sine';
   const oscGain = audioCtx.createGain();
   
-  // Частота 50→20 Hz
-  osc.frequency.setValueAtTime(50, startTime);
-  osc.frequency.exponentialRampToValueAtTime(20, startTime + 0.3);
+  // Частота 70→28 Hz (було 50→20, тепер +40%)
+  osc.frequency.setValueAtTime(70, startTime);
+  osc.frequency.exponentialRampToValueAtTime(28, startTime + 0.3);
   
-  // М'ЯКА АТАКА БЕЗ КЛАЦАННЯ - починаємо з 0 і плавно піднімаємо
+  // М'ЯКА АТАКА БЕЗ КЛАЦАННЯ
   oscGain.gain.setValueAtTime(0, startTime);
   oscGain.gain.linearRampToValueAtTime(1.4 * gainMultiplier, startTime + 0.05);
   oscGain.gain.linearRampToValueAtTime(1.2 * gainMultiplier, startTime + 0.5);
@@ -379,28 +377,29 @@ function scheduleKicks() {
   setTimeout(scheduleKicks, (initialDelay + kickInterval * 19) * 1000);
 }
 
-// КНОПКА ЗВУКУ
+// КНОПКА ЗВУКУ - ЗАПУСК З ОДНОГО НАТИСКАННЯ
 const muteBtn = document.getElementById('muteBtn');
 
 muteBtn.onclick = () => {
-  if (!kickDrum.initialized) {
+  if (!audioCtx) {
+    // ПЕРШЕ НАТИСКАННЯ - ЗАПУСКАЄМО ЗВУК
     initAudio();
     muteBtn.style.background = '#555';
-    return;
-  }
-  
-  if (audioCtx && audioCtx.state === 'suspended') {
-    audioCtx.resume().catch(() => {});
-  }
+  } else {
+    // НАСТУПНІ НАТИСКАННЯ - ВИМИКАЄМО/ВМИКАЄМО
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().catch(() => {});
+    }
 
-  kickDrum.mute = !kickDrum.mute;
-  
-  const now = audioCtx.currentTime;
-  masterGain.gain.cancelScheduledValues(now);
-  masterGain.gain.setValueAtTime(masterGain.gain.value, now);
-  masterGain.gain.linearRampToValueAtTime(kickDrum.mute ? 0 : 1.0, now + 0.3);
-  
-  muteBtn.style.background = kickDrum.mute ? '#333' : '#555';
+    kickDrum.mute = !kickDrum.mute;
+    
+    const now = audioCtx.currentTime;
+    masterGain.gain.cancelScheduledValues(now);
+    masterGain.gain.setValueAtTime(masterGain.gain.value, now);
+    masterGain.gain.linearRampToValueAtTime(kickDrum.mute ? 0 : 1.0, now + 0.3);
+    
+    muteBtn.style.background = kickDrum.mute ? '#333' : '#555';
+  }
 };
 
 // КНОПКА ЗАМОРОЗКИ - ВІДНОВЛЮЄ ТЕКСТ НА 2-3 СЕКУНДИ
