@@ -215,12 +215,14 @@ const texts = [
 ];
 
 let textFrozen = false;
+let originalOrder = {}; // Зберігаємо початковий порядок слів
 
 function setup(){
   ['p1','p2','p3'].forEach((id, idx)=>{
     const cont = document.getElementById(id);
     cont.innerHTML = '';
     const words = texts[idx].split(/\s+/).filter(Boolean);
+    originalOrder[id] = words.slice(); // Зберігаємо оригінальний порядок
     words.forEach((w)=>{
       const sp = document.createElement('span');
       sp.className = 'word';
@@ -230,6 +232,21 @@ function setup(){
   });
 }
 setup();
+
+// ВІДНОВЛЕННЯ ТЕКСТУ В ПОЧАТКОВИЙ СТАН
+function restoreText(){
+  ['p1','p2','p3'].forEach((id)=>{
+    const cont = document.getElementById(id);
+    cont.innerHTML = '';
+    const words = originalOrder[id];
+    words.forEach((w)=>{
+      const sp = document.createElement('span');
+      sp.className = 'word';
+      sp.textContent = w;
+      cont.appendChild(sp);
+    });
+  });
+}
 
 function shuffleOnce(){
   if (textFrozen) return;
@@ -260,21 +277,31 @@ function shuffleOnce(){
   });
 }
 
-// АУДИО: БАСОВЫЙ БАРАБАН - СРАЗУ БЕЗ ЗАДЕРЖЕК
+// АУДИО: ШАГИ З ЗАТРИМКОЮ 3 СЕКУНДИ
 let audioCtx = null;
 let masterGain = null;
-let kickDrum = { running: false, mute: false };
+let kickDrum = { running: false, mute: false, initialized: false };
 
 function initAudio() {
-  if (audioCtx) return;
+  if (kickDrum.initialized) return;
+  
   try {
     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
     masterGain = audioCtx.createGain();
-    masterGain.gain.value = kickDrum.mute ? 0 : 1.0;
+    masterGain.gain.value = 1.0;
     masterGain.connect(audioCtx.destination);
 
+    kickDrum.initialized = true;
     kickDrum.running = true;
-    scheduleKicks();
+    kickDrum.mute = false;
+    
+    if (audioCtx.state === 'suspended') {
+      audioCtx.resume().then(() => {
+        scheduleKicks();
+      });
+    } else {
+      scheduleKicks();
+    }
   } catch (e) {
     console.warn('AudioContext not available:', e);
     kickDrum.running = false;
@@ -282,7 +309,7 @@ function initAudio() {
   }
 }
 
-// Создание одного ГУЛКОГО удара - БЕЗ СКРИПОВ
+// Створення одного ГУЧНОГО удару - БЕЗ СКРИПІВ
 function makeSingleKick(startTime, gainMultiplier = 1.0) {
   if (!audioCtx || !kickDrum.running) return;
   
@@ -294,7 +321,7 @@ function makeSingleKick(startTime, gainMultiplier = 1.0) {
   osc.frequency.setValueAtTime(50, startTime);
   osc.frequency.exponentialRampToValueAtTime(20, startTime + 0.3);
   
-  // МЯГКАЯ АТАКА БЕЗ ЩЕЛЧКА - начинаем с 0 и плавно поднимаем
+  // М'ЯКА АТАКА БЕЗ КЛАЦАННЯ - починаємо з 0 і плавно піднімаємо
   oscGain.gain.setValueAtTime(0, startTime);
   oscGain.gain.linearRampToValueAtTime(1.4 * gainMultiplier, startTime + 0.05);
   oscGain.gain.linearRampToValueAtTime(1.2 * gainMultiplier, startTime + 0.5);
@@ -302,7 +329,7 @@ function makeSingleKick(startTime, gainMultiplier = 1.0) {
   
   osc.connect(oscGain);
   
-  // ГУЛКАЯ РЕВЕРБЕРАЦИЯ
+  // ГУЧНА РЕВЕРБЕРАЦІЯ
   const convolver = audioCtx.createConvolver();
   const reverbLength = audioCtx.sampleRate * 3.5;
   const reverbBuffer = audioCtx.createBuffer(2, reverbLength, audioCtx.sampleRate);
@@ -328,7 +355,7 @@ function makeSingleKick(startTime, gainMultiplier = 1.0) {
   osc.stop(startTime + 3.6);
 }
 
-// ДВОЙНОЙ УДАР
+// ПОДВІЙНИЙ УДАР
 function makeDoubleKick(startTime) {
   if (!audioCtx || !kickDrum.running) return;
   
@@ -336,29 +363,32 @@ function makeDoubleKick(startTime) {
   makeSingleKick(startTime + 0.06, 0.8);
 }
 
-// ДВОЙНЫЕ УДАРЫ КАЖДЫЕ 2 СЕКУНДЫ - СРАЗУ БЕЗ ЗАДЕРЖКИ
+// ПОДВІЙНІ УДАРИ КОЖНІ 2 СЕКУНДИ - ПЕРШИЙ УДАР ЧЕРЕЗ 3 СЕКУНДИ
 function scheduleKicks() {
   if (!kickDrum.running) return;
   
   const now = audioCtx.currentTime;
   const kickInterval = 2.0;
+  const initialDelay = 3.0; // ЗАТРИМКА 3 СЕКУНДИ
   
-  // ПЕРВЫЙ УДАР СРАЗУ - БЕЗ ЗАДЕРЖКИ
+  // ПЕРШИЙ УДАР ЧЕРЕЗ 3 СЕКУНДИ
   for (let i = 0; i < 20; i++) {
-    makeDoubleKick(now + kickInterval * i);
+    makeDoubleKick(now + initialDelay + kickInterval * i);
   }
   
-  setTimeout(scheduleKicks, kickInterval * 1000 * 19);
+  setTimeout(scheduleKicks, (initialDelay + kickInterval * 19) * 1000);
 }
 
-// КНОПКА ЗВУКА
+// КНОПКА ЗВУКУ
 const muteBtn = document.getElementById('muteBtn');
 
 muteBtn.onclick = () => {
-  if (!audioCtx) {
+  if (!kickDrum.initialized) {
     initAudio();
-    if (!audioCtx) return;
+    muteBtn.style.background = '#555';
+    return;
   }
+  
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume().catch(() => {});
   }
@@ -373,7 +403,7 @@ muteBtn.onclick = () => {
   muteBtn.style.background = kickDrum.mute ? '#333' : '#555';
 };
 
-// КНОПКА ЗАМОРОЗКИ
+// КНОПКА ЗАМОРОЗКИ - ВІДНОВЛЮЄ ТЕКСТ НА 2-3 СЕКУНДИ
 const freezeBtn = document.getElementById('freezeBtn');
 
 freezeBtn.onclick = () => {
@@ -381,6 +411,9 @@ freezeBtn.onclick = () => {
   
   textFrozen = true;
   freezeBtn.style.background = '#777';
+  
+  // ВІДНОВЛЮЄМО ТЕКСТ В ПОЧАТКОВИЙ СТАН
+  restoreText();
   
   const freezeDuration = 2000 + Math.random() * 1000;
   
@@ -390,7 +423,7 @@ freezeBtn.onclick = () => {
   }, freezeDuration);
 };
 
-// ТЕКСТОВАЯ АНИМАЦИЯ
+// ТЕКСТОВА АНІМАЦІЯ
 (function startTextLoop(){
   function step() {
     const baseDelay = 4400;
